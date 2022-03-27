@@ -1,0 +1,46 @@
+{
+	"manifest_version": 3,
+	"name": "HuiBang Price Assistant",
+	"version": "1.0",
+	"description": "Price assistant",
+	"author": "MacrothTao@hotmail.com",
+	"host_permissions": [	    "https://*/*"	],
+	"permissions": [
+        "scripting",
+        "storage",
+        "tabs",
+        "webRequest"
+    ],
+	"background": {		"service_worker": "background.js"	},
+	"action": {
+		"default_icon": {
+			"32":"img/pa-32.png",
+			"64": "img/pa-64.png",
+			"128": "img/pa-128.png"},
+		"default_popup": "popup.html",
+		"default_title": "HuiBang Price Assistant"
+	},
+	"content_scripts": [
+	{	"#all_frames": true,
+        "matches": ["*://*.1688.com/*"],
+		"#js": ["jquery-3.6.0.min.js", "content.js"],
+		"js": ["content.js"],
+		"run_at": "document_start"
+	}],
+	"content_security_policy": {
+  		"#extension_pages": "script-src 'self' http://localhost; object-src 'self'"
+	},
+	"devtools_page": "devtools.html",
+	"homepage_url": "https://www.sogou.com",
+	"icons": 
+	{
+		"32":"img/pa-32.png",
+		"64": "img/pa-64.png",
+		"128": "img/pa-128.png"
+	},
+	"omnibox": { "keyword" : "price" },
+	"web_accessible_resources": [{
+        "resources": ["/js/*"],
+        "matches": ["<all_urls>"]
+    }]
+}

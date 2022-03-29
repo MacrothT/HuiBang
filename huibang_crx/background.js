@@ -80,7 +80,7 @@ function extractORD(html, tabID) {
         //模板字符串必须用`不能用"或'
         //TODO:onMessage(html)
     } else {
-        //let onePageOffers = 
+        let sortedInOnePageCount = 
         sortQuantityPricesInPage(jsonObj.data, tabID);
         //FIXME:add handler for pageCount>1
         //dispHTML = toDispHTML(onePageOffers);
@@ -90,10 +90,15 @@ function extractORD(html, tabID) {
 
 async function sortQuantityPricesInPage(data, tabID) {
     //let sortedOffersRound1 = new Array();
-    if (0 < data?.offerList?.length) {
-        let ajaxDataArray = new Array()
+    let offersCountInPage= data?.offerList?.length;
+    if (offersCountInPage && (0 < offersCountInPage)) {
+        let processed = 1, ajaxDataArray = new Array()
           , encounteredPunishPage = false;
         for (let oneOffer of data.offerList) {
+            chrome.runtime.sendMessage({
+                    progress: `正在处理第 ${processed} / ${offersCountInPage}个，耐心等待……`
+                });
+            processed++;
             let oneODUrl = oneOffer?.information?.detailUrl;
             await function sleep(time) {
                 return new Promise(resolve=>setTimeout(resolve, time));
@@ -202,7 +207,7 @@ async function sortQuantityPricesInPage(data, tabID) {
             );
         }
     }
-    //return sortedOffersRound1;//TODO: no need to return?
+    return offersCountInPage;//return sortedOffersRound1;
 }
 
 function save(quantityBegin) {//bgQuantityBegin=quantityBegin;

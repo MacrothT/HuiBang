@@ -1,9 +1,6 @@
 (function() {
     "use strict";
-    window.addEventListener('DOMContentLoaded', (event)=>{
-        injectScript();
-    }
-    );
+    window.addEventListener("DOMContentLoaded", (event)=> injectScript() );
 
     function injectScript() {
         let htmlHead = document.head
@@ -32,7 +29,7 @@
                     let id = "" + event.data.id;
                     chrome.storage.local.get([id], (result)=>{
                         let fod = result[id];
-                        //console.log("storage value is ", fod);					    
+                        //console.log("storage value is ", fod);
                         if (!fod.isAdded) {
                             fod.priceAdded = fod.priceAdded + Number(event.data.cost);
                         }
@@ -46,7 +43,7 @@
                 } else if (event.data?.fodIDs) {
                     Promise.all(event.data.fodIDs.map((oneID)=>{
                         // Immediately return a promise and start asynchronous work
-                        return new Promise((resolve,reject)=>{
+                        return new Promise(function(resolve,reject){
                             let timeoutID = setTimeout(()=>{
                                 // Asynchronously get data from storage.local.
                                 chrome.storage.local.get([oneID], (result)=>{
@@ -67,7 +64,7 @@
                         }
                         );
                     }
-                    )).then((fodArray)=>{
+                    )).then(function(fodArray){
                         fodArray.sort((a,b)=>a.priceAdded - b.priceAdded);
                         let dispHTML = toDispHTML(fodArray);
                         const rsWindow = window.open("", `Huibang排序结果：`);
@@ -86,8 +83,8 @@
 
     chrome.runtime.onMessage.addListener((request,sender,sendResponse)=>{
         /*typeof fodAjaxData : Array({flow: "general", excludeAreaCode4FreePostage: "ALL", 
-	     * countryCode: 1001, provinceCode: 1098, cityCode: 1099, amount: ?, templateId: ?, memberId: ?, 
-	     * offerId: ?, price: ?, volume: ?, weight: ? }, {...},...) */
+         * countryCode: 1001, provinceCode: 1098, cityCode: 1099, amount: ?, templateId: ?, memberId: ?, 
+         * offerId: ?, price: ?, volume: ?, weight: ? }, {...},...) */
         let fodAjaxData = request?.fodAjaxData;
         if (fodAjaxData && fodAjaxData.length !== 0) {
             try {
@@ -96,7 +93,7 @@
                 window.postMessage({
                     ajaxData: fodAjaxData
                 }, "https://s.1688.com");
-                //'*');
+                //"*");
                 //await new Promise(resolve => setTimeout(resolve, 10000)).then(()=> {if (lastC && lastC?.id === idConst){ lastC.remove(); }});
             } catch (error) {
                 console.log(error);
@@ -109,37 +106,37 @@
     );
 
     /*<li><div class="space-offer-card-box" style="overflow: hidden;">
-	<div class="normalcommon-offer-card">
-		<div class="img-container"><div class="mojar-element-image">
-			<a href="https://detail.1688.com/offer/642221231300.html" target="_blank">
-				<div class="img" style="background-image: url(&quot;https://cbu01.alicdn.com/img/ibank/O1CN01Rs23Qf1lWoTpEAx2z_!!2211211934827-0-cib.290x290.jpg?_=2020&quot;);">
-			</div></a></div></div>
-		<div class="mojar-element-title">
-			<a href="https://detail.1688.com/offer/642221231300.html" target="_blank">
-				<div class="title">包邮 欢舞加厚高清下载运动健身跳舞机 电脑USB单人家用跳舞毯</div>
-		</a></div>
-		<div class="mojar-element-offerTag"><div class="offer-tag-container">
-			<div class="offer-tags"><span class="promotion-text-tag" title="包邮">包邮</span>
-			    <a class="service-text-tag" title="深度验商">深度验商</a>
-			    <a class="service-text-tag" title="免费赊账">免费赊账</a>
-		</div></div></div>
-		<div class="mojar-element-price"><div class="showPricec"><div class="rmb">¥</div>
-		    <div class="price">67.50</div><div class="pricestyle"></div></div>
-		</div>
-		<div class="mojar-element-company">
-			<a class="credit-tag identity-tag" href="https://shop3e67986509770.1688.com/page/creditdetail.htm" target="_blank" title="阿里巴巴建议您优先选择诚信通会员">1年</a>
-			<div class="common-company-tag"></div>
-			<div class="company-name" title="新罗区智绛沛百货店">
-				<a href="https://shop3e67986509770.1688.com" target="_blank">
-					<div class="company-name">新罗区智绛沛百货店</div>
-		</a></div></div>
-		<div class="card-element-hover" style="display: none;">
-   		    <div class="deal-container"><div class="dealInfo-1 deal">
-				<div class="deal-item"><div class="price-container">
-					<div class="rmb">¥</div><div class="price">67.50</div></div>
-					<div class="deal-num">≥2件</div>
-		</div></div></div></div>
-		<div class="mojar-element-promotion"></div>
+    <div class="normalcommon-offer-card">
+        <div class="img-container"><div class="mojar-element-image">
+            <a href="https://detail.1688.com/offer/642221231300.html" target="_blank">
+                <div class="img" style="background-image: url(&quot;https://cbu01.alicdn.com/img/ibank/O1CN01Rs23Qf1lWoTpEAx2z_!!2211211934827-0-cib.290x290.jpg?_=2020&quot;);">
+            </div></a></div></div>
+        <div class="mojar-element-title">
+            <a href="https://detail.1688.com/offer/642221231300.html" target="_blank">
+                <div class="title">包邮 欢舞加厚高清下载运动健身跳舞机 电脑USB单人家用跳舞毯</div>
+        </a></div>
+        <div class="mojar-element-offerTag"><div class="offer-tag-container">
+            <div class="offer-tags"><span class="promotion-text-tag" title="包邮">包邮</span>
+                <a class="service-text-tag" title="深度验商">深度验商</a>
+                <a class="service-text-tag" title="免费赊账">免费赊账</a>
+        </div></div></div>
+        <div class="mojar-element-price"><div class="showPricec"><div class="rmb">¥</div>
+            <div class="price">67.50</div><div class="pricestyle"></div></div>
+        </div>
+        <div class="mojar-element-company">
+            <a class="credit-tag identity-tag" href="https://shop3e67986509770.1688.com/page/creditdetail.htm" target="_blank" title="阿里巴巴建议您优先选择诚信通会员">1年</a>
+            <div class="common-company-tag"></div>
+            <div class="company-name" title="新罗区智绛沛百货店">
+                <a href="https://shop3e67986509770.1688.com" target="_blank">
+                    <div class="company-name">新罗区智绛沛百货店</div>
+        </a></div></div>
+        <div class="card-element-hover" style="display: none;">
+            <div class="deal-container"><div class="dealInfo-1 deal">
+                <div class="deal-item"><div class="price-container">
+                    <div class="rmb">¥</div><div class="price">67.50</div></div>
+                    <div class="deal-num">≥2件</div>
+        </div></div></div></div>
+        <div class="mojar-element-promotion"></div>
     </div></div></li>*/
     function toDispHTML(FODOffers) {
         const innerHead = '<!DOCTYPE html><html lang="cmn-Hans"><head><meta charset="utf-8"><title>惠帮</title></head><body class="zh-cn" style="position: relative;"><div id="app"><div><div class="space-common-offerlist"><div data-spm="offerlist"><div class="common-original-offer-list"><div class="sm-offer"><ol id="sm-offer-list" class="offer-list">';

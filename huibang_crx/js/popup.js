@@ -2,23 +2,20 @@ document.body.style.border = "2px solid #E5F2F2";
 
 const searchBtn = document.querySelector('button[name="search"]');
 searchBtn.onclick = function(){
-    //var background = chrome.extension.getBackgroundPage();
-    //background.save(quantityBegin.value);
     //WARN: chrome.tabs.getCurrent() NOT available here!
     chrome.tabs.query({
         active: true,
         currentWindow: true
-    }, function(tabs){
+    }, (tabs) => {
         const url = tabs[0].url
           , errorDiv = document.getElementById("error-content");
         if (url?.startsWith("https://s.1688.com/selloffer/offer_search.htm?keywords=")) {
-            const searchURL = url + `&quantityBegin=${quantityBegin.value}&sortType=price&descendOrder=false&filt=y&filtMemberTags=1445761#sm-filtbar`;
             errorDiv.style.display = "none";
             try {
                 chrome.runtime.sendMessage({
-                    searchURL: `${searchURL}`,
+                    searchURL: `${url}`, fodSuffix: `&quantityBegin=${quantityBegin.value}&sortType=price&descendOrder=false&filt=y&filtMemberTags=1445761#sm-filtbar`,
                     tabID: tabs[0].id
-                });
+                },(response)=>{});
                 //console.log(searchURL);
             } catch (error) {
                 display(error);
@@ -52,6 +49,7 @@ chrome.runtime.onMessage.addListener((request,sender,sendResponse)=>{
         progressDiv.innerHTML = `${request.progress}`;
         progressDiv.style.display = "block";
     }
+    sendResponse();
     return true;
     // Add this so that it will respond asynchronously.
 }

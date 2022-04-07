@@ -1,9 +1,9 @@
 (function() {
     "use strict";
-    window.addEventListener("message", function(event) {
+    window.addEventListener("message", (event) => {
         if (event.origin === "https://s.1688.com" && event.data?.ajaxData) {
-            Promise.allSettled(event.data.ajaxData.map(function(oneAjax) {
-                return new Promise(function(resolve, reject) {
+            Promise.allSettled(event.data.ajaxData.map((oneAjax) =>{
+                return new Promise((resolve, reject) => {
                     //WARN: chrome.storage unavailable here!
                     //for (let oneAjax of event.data.ajaxData) {
                     //Behavior of www.1688.com/offer/...
@@ -16,8 +16,8 @@
                             url: "https://laputa.1688.com/offer/ajax/CalculateFreight.do",
                             dataType: "jsonp",
                             data: oneAjax,
-                            success: function(t) {
-                                //Example: costs: [{cost: '4', subTemplate: '快递'}]
+                            success: (t) => {
+                                //Example of t: {"data":{"costs":[{"cost":"4","subTemplate":"快递"}]},"success":true}
                                 // Assuming you've verified the origin of the received message (which
                                 // you must do in any case), a convenient idiom for replying to a
                                 // message is to call postMessage and provide event.origin as the targetOrigin.
@@ -37,8 +37,11 @@
                         resolve(oneAjax?.offerId);
                     }
                 }
-                );
-            })).then(function(results) {
+                ).catch((error) =>{
+                    console.log(error);
+                    reject(oneAjax?.offerId);
+                });//.finally(() => {});
+            })).then((results) => {
                 window.postMessage({
                     "fodIDs": results.map((oneResult)=>"fulfilled" === oneResult.status ? oneResult.value : oneResult.reason)
                 }, event.origin);

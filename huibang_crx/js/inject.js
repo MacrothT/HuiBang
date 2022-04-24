@@ -1,9 +1,9 @@
 (function() {
     "use strict";
-    window.addEventListener("message", (event) => {
+    window.addEventListener("message", (event)=>{
         if (event.origin === "https://s.1688.com" && event.data?.ajaxData) {
-            Promise.allSettled(event.data.ajaxData.map((oneAjax) =>{
-                return new Promise((resolve, reject) => {
+            Promise.allSettled(event.data.ajaxData.map((oneAjax)=>{
+                return new Promise((resolve,reject)=>{
                     //WARN: chrome.storage unavailable here!
                     //for (let oneAjax of event.data.ajaxData) {
                     //Behavior of www.1688.com/offer/...
@@ -16,7 +16,7 @@
                             url: "https://laputa.1688.com/offer/ajax/CalculateFreight.do",
                             dataType: "jsonp",
                             data: oneAjax,
-                            success: (t) => {
+                            success: (t)=>{
                                 //Example of t: {"data":{"costs":[{"cost":"4","subTemplate":"快递"}]},"success":true}
                                 // Assuming you've verified the origin of the received message (which
                                 // you must do in any case), a convenient idiom for replying to a
@@ -31,21 +31,29 @@
                                     console.log(`Error: Mal-format in ajax return values for: ${oneAjax}`);
                                     reject(oneAjax?.offerId);
                                 }
-                            }//,error:( jqXHR jqXHR, String textStatus, String errorThrown )=>{reject(errorThrown);}
+                            }
+                            //,error:( jqXHR jqXHR, String textStatus, String errorThrown )=>{reject(errorThrown);}
                         });
                     } else {
                         resolve(oneAjax?.offerId);
                     }
                 }
-                ).catch((error) =>{
+                ).catch((error)=>{
                     console.log(error);
                     reject(oneAjax?.offerId);
-                });//.finally(() => {});
-            })).then((results) => {
+                }
+                );
+                //.finally(() => {});
+            }
+            )).then((results)=>{
                 window.postMessage({
-                    "fodIDs": results.map((oneResult)=>"fulfilled" === oneResult.status ? oneResult.value : oneResult.reason)
+                    "batchFODIDs": results.map((oneResult)=>"fulfilled" === oneResult.status ? oneResult.value : oneResult.reason),
+                    "pageNum": event.data?.pageNum,
+                    "isLastPage": event.data?.isLastPage
                 }, event.origin);
-            });
+            }
+            );
         }
-    }, true);
+    }
+    , true);
 }());

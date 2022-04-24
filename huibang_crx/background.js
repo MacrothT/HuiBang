@@ -35,7 +35,7 @@ async function loadFirstOrderDiscounts(fodURL, tabID) {
       , eIdx = fodURL.indexOf('&', sIdx + 1)
       , quantityBegin = +fodURL.substring(sIdx + 15, eIdx);
     //String->Int
-    extractORD(await fetchHTML(fodURL), quantityBegin, tabID);
+    extractORD(fodURL, quantityBegin, tabID);
 }
 
 async function fetchHTML(url) {
@@ -52,48 +52,70 @@ async function fetchHTML(url) {
     }
 }
 
-//从fetch的返回页中找到offer数据：
-//HTML文本中有...<html...>...<body...>...<script>... window.data.offerresultData = successDataCheck({..."data":{..."pageCount":..."totalCount":...}});
+//连续从fetch的返回页中找到offer数据，聚合多个页面中符合条件的offer形成一个结果集。
+//每个HTML文本中均有...<html...>...<body...>...<script>... window.data.offerresultData = successDataCheck({..."data":{..."pageCount":..."totalCount":...}});
 //...</script>...</body>...</html>
-function extractORD(html, quantityBegin, tabID) {
-    let startIdx = html.indexOf('(', html.indexOf("window.data.offerresultData"));
-    let endIdx = html.indexOf(');', startIdx), ordStr = html.substring(startIdx + 1, endIdx), jsonObj;
-    try {
-        jsonObj = JSON.parse(ordStr);
-    } catch (error) {
-        console.log(`${error} from JSON: ${jsonObj}`);
-        //TODO:onMessage(html)
-    }
-    //处理fetch的返回页中offer列表：
-    //Case 0：正常返回offers。
-    //Case -1：返回内容为“在您的筛选条件下，没找到...”，即offer数为0：
-    //json中有{..."data":{..."pageCount":0..."totalCount":0...}}
-    if (!jsonObj?.data?.hasOwnProperty("pageCount")) {
-        console.log(`No "data" or "pageCount" in offerresultData: ${ordStr}`);
-        //TODO:onMessage(html)
-    } else if (0 == jsonObj.data.pageCount) {
-        //document.getElementById("body").innerHTML=`在指定的 关键词 及 起批量:${quantityBegin}下没有首单优惠的货源。`;
-        console.log(`在指定的 关键词 及 起批量：${quantityBegin} 下没有首单优惠的货源。`);
-        //模板字符串必须用`不能用"或'
-        //TODO:onMessage(html)
-    } else {
-        let sortedInOnePageCount = sortQuantityPricesInPage(jsonObj.data, quantityBegin, tabID);
-        //FIXME:add handler for pageCount>1
-        //dispHTML = toDispHTML(onePageOffers);
-    }
+async function extractORD(fodURL, quantityBegin, tabID) {
+    let pageNum = 1
+      , pageCnt = 0
+      , isLastPage = true
+      , sortedInMultiplePages = 0;
+    do {
+        const fodPageURL = (1 === pageNum) ? fodURL : fodURL.replace("#sm-filtbar", `&beginPage=${pageNum}`);
+        let html = await fetchHTML(fodPageURL);
+        const startIdx = html.indexOf('(', html.indexOf("window.data.offerresultData"));
+        const endIdx = html.indexOf(');', startIdx)
+          , ordStr = html.substring(startIdx + 1, endIdx);
+        let jsonObj;
+        try {
+            jsonObj = JSON.parse(ordStr);
+        } catch (error) {
+            console.log(`${error} from JSON: ${jsonObj}`);
+            //TODO:onMessage(html)
+        }
+        //处理fetch的返回页中offer列表：
+        //Case 0：正常返回offers。
+        //Case -1：返回内容为“在您的筛选条件下，没找到...”，即offer数为0：
+        //json中有{..."data":{..."pageCount":0..."totalCount":0...}}
+
+        if (1 === pageNum) {
+            pageCnt = jsonObj.data.pageCount;
+            if (!jsonObj?.data?.hasOwnProperty("pageCount")) {
+                console.log(`No "data" or "pageCount" in offerresultData: ${ordStr}`);
+                break;
+                //TODO:onMessage(html)
+            }
+        }
+        if (0 === pageCnt) {
+            //document.getElementById("body").innerHTML=`在指定的 关键词 及 起批量:${quantityBegin}下没有首单优惠的货源。`;
+            console.log(`在指定的 关键词 及 起批量：${quantityBegin} 下没有首单优惠的货源。`);
+            //模板字符串必须用`不能用"或'
+            break;
+            //TODO:onMessage(html)
+        }
+        {
+            isLastPage = new Boolean(pageNum === pageCnt);
+            sortedInMultiplePages += sortQuantityPricesInPage(jsonObj.data, sortedInMultiplePages, quantityBegin, tabID, pageNum, isLastPage);
+            pageNum++;
+            //FIXME:add handler for &beginPage=i
+            //dispHTML = toDispHTML(onePageOffers);
+        }
+    } while (!isLastPage);
 }
 
-async function sortQuantityPricesInPage(data, quantityBegin, tabID) {
+async function sortQuantityPricesInPage(data, sortedBefore, quantityBegin, tabID, pageNum, isLastPage) {
     //let sortedOffersRound1 = new Array();
     let offersCountInPage = data?.offerList?.length;
     if (offersCountInPage && (0 < offersCountInPage)) {
-        let processed = 1
+        let processed = sortedBefore + 1
+          , offersCountForNow = sortedBefore + offersCountInPage
           , ajaxDataArray = new Array()
           , encounteredPunishPage = false;
         for (let oneOffer of data.offerList) {
             chrome.runtime.sendMessage({
-                progress: `正在处理第 ${processed} / ${offersCountInPage}个，耐心等待……`
-            },(response)=>{});
+                progress: `正在处理第 ${processed} / ${offersCountForNow}个，耐心等待……`
+            }, (response)=>{}
+            );
             processed++;
             let oneODUrl = oneOffer?.information?.detailUrl;
             await function sleep(time) {
@@ -196,12 +218,15 @@ async function sortQuantityPricesInPage(data, quantityBegin, tabID) {
         }
         if (!encounteredPunishPage) {
             chrome.tabs.sendMessage(tabID, {
-                fodAjaxData: ajaxDataArray
+                "ajaxData": ajaxDataArray,
+                "pageNum": pageNum,
+                "isLastPage": isLastPage
             }, (response)=>{
                 console.log(response);
             }
             );
-        }
+        } else
+            offersCountInPage = 0;
     }
     return offersCountInPage;
     //return sortedOffersRound1;

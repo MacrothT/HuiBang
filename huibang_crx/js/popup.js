@@ -14,9 +14,10 @@ searchBtn.onclick = function() {
             try {
                 chrome.runtime.sendMessage({
                     searchURL: `${url}`,
-                    fodSuffix: `&quantityBegin=${quantityBegin.value}&sortType=price&descendOrder=false&filt=y&filtMemberTags=1445761#sm-filtbar`,
+                    fodSuffix: `&quantityBegin=${quantityBegin.value}&sortType=price&descendOrder=false&filt=y&filtMemberTags=1445761`,
+                    //#sm-filtbar`,
                     tabID: tabs[0].id
-                }//, (response)=>{}
+                }, (response)=>{}
                 );
                 //console.log(searchURL);
             } catch (error) {

@@ -47,9 +47,10 @@
             }
             )).then((results)=>{
                 window.postMessage({
-                    "batchFODIDs": results.map((oneResult)=>"fulfilled" === oneResult.status ? oneResult.value : oneResult.reason),
+                    "batchIDs": results.map((oneResult)=>"fulfilled" === oneResult.status ? oneResult.value : oneResult.reason),
+                    "isLastPage": event.data?.isLastPage,
                     "pageNum": event.data?.pageNum,
-                    "isLastPage": event.data?.isLastPage
+                    "quantityBegin": event.data?.quantityBegin
                 }, event.origin);
             }
             );

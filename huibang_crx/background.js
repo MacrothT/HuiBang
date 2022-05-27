@@ -1,31 +1,32 @@
 ////importScripts('script1.js', 'script2.js');
-const cptKey = "currentPriceThreshold";
+const CPT_KEY = "currentPriceThreshold";
 
 chrome.runtime.onMessage.addListener((request,sender,sendResponse)=>{
     let searchURL = request?.searchURL;
-    if (searchURL && 0 !== searchURL.length && request?.fodSuffix && 0 !== request.fodSuffix.length) {
-        //const fodURL = searchURL + request.fodSuffix;
-        //console.log(fodURL);
+    if (searchURL && 0 !== searchURL.length && request?.iodSuffix && 0 !== request.iodSuffix.length) {
+        //const iodURL = searchURL + request.iodSuffix;
+        //console.log(iodURL);
         try {
             chrome.runtime.sendMessage({
                 progress: "开始处理第一批"
             });
             chrome.storage.local.clear();
             chrome.storage.local.set({
-                [cptKey]: Number.MAX_SAFE_INTEGER
-            }, ()=>sendResponse());
+                [CPT_KEY]: Number.MAX_SAFE_INTEGER
+            }, ()=>{}
+            );
         } catch (error) {
             console.error(error);
         }
         //async()=>{await...
-        loadFirstOrderDiscounts(searchURL + request.fodSuffix, request.tabID).then((searchURL,request)=>{
+        loadInitialOrderDiscounts(searchURL + request.iodSuffix, request.tabID).then((searchURL,request)=>{
             chrome.runtime.sendMessage({
                 progress: "开始处理第二批"
             });
             //Load One Item Consign Offers//FIXME
             //extractORD(searchURL, Infinity, request.tabID);
         }
-        ).catch((e)=>console.error(e));
+        ).catch((e)=>console.error(e)).finally(()=>sendResponse());
     }
     //return true;
     // Add this so that it will respond asynchronously.
@@ -45,12 +46,12 @@ chrome.runtime.onMessage.addListener((request,sender,sendResponse)=>{
     }
 });*/
 
-async function loadFirstOrderDiscounts(fodURL, tabID) {
-    const START = fodURL.indexOf("&quantityBegin=")
-      , END = fodURL.indexOf('&', START + 1)
-      , quantityBegin = +fodURL.substring(START + 15, END);
+async function loadInitialOrderDiscounts(iodURL, tabID) {
+    const START = iodURL.indexOf("&quantityBegin=")
+      , END = iodURL.indexOf('&', START + 1)
+      , quantityBegin = +iodURL.substring(START + 15, END);
     //String->Int
-    extractORD(fodURL, quantityBegin, tabID);
+    await extractORD(iodURL, quantityBegin, tabID);
 }
 
 async function fetchHTML(url) {
@@ -77,9 +78,9 @@ async function extractORD(searchURL, quantityBegin, tabID) {
       , sortedInMultiplePages = 0
       , toNextPage = true;
     do {
-        const PAGEURL = searchURL + `&beginPage=${pageNum}`;
+        const PAGE_URL = searchURL + `&beginPage=${pageNum}`;
         //模板字符串必须用`不能用"或'
-        const HTML = await fetchHTML(PAGEURL);
+        const HTML = await fetchHTML(PAGE_URL);
         const START = HTML.indexOf('(', HTML.indexOf("window.data.offerresultData"));
         const END = HTML.indexOf(");", START)
           , ORD_STRING = HTML.substring(START + 1, END);
@@ -131,12 +132,12 @@ async function sortQuantityPricesInPage(data, sortedBefore, quantityBegin, tabID
     let offersCountInPage = data?.offerList?.length
       , ajaxDataArray = new Array();
     if (offersCountInPage && (0 < offersCountInPage)) {
-        let processed = sortedBefore + 1, offersCountForNow = sortedBefore + offersCountInPage, msg, encounteredPunishPage = false;
+        let processed = sortedBefore + 1
+          , offersCountForNow = sortedBefore + offersCountInPage
+          , encounteredPunishPage = false;
         for (let oneOffer of data.offerList) {
-            msg = "正在处理第" + processed + " / " + offersCountForNow + "个，耐心等待……";
-
             chrome.runtime.sendMessage({
-                progress: msg
+                "progress": `正在处理第 ${processed} / ${offersCountForNow} 个，耐心等待……`
             });
             processed++;
             let oneODUrl = oneOffer?.information?.detailUrl;
@@ -163,36 +164,49 @@ async function sortQuantityPricesInPage(data, sortedBefore, quantityBegin, tabID
                 // tradePrice下有freightPrice字段，但无真实值。
                 var offerPrice = tradePrice?.offerPrice || {};
                 var quantityPrices = offerPrice?.quantityPrices || [];
-                let offerPriceAdded = 0
-                  , aboveThreshold = false;
-                for (oneQP of quantityPrices) {
-                    var oneQ = oneQP?.quantity;
-                    offerPriceAdded = +oneQP.valueString;
-                    var sIdx = oneQ.indexOf('~');
-                    if (-1 != sIdx) {
-                        var upperQ = +oneQ.substring(sIdx + 1);
-                        if (quantityBegin <= upperQ) {
-                            aboveThreshold = await compareWithCPT({
-                                priceAdded: offerPriceAdded,
-                                isAdded: Boolean("FREE" === dataJSON?.deliveryFee),
-                                quantity: oneQ,
-                                offer: oneOffer
-                            });
-                            //sortedOffersRound1.push(offerId);
-                            break;
+                let fitQuantityAndPrice = {
+                    isAdded: Boolean("FREE" === dataJSON?.deliveryFee),
+                    offer: {
+                        company: {
+                            name: oneOffer.company.name,
+                            url: oneOffer.company.url
+                        },
+                        id: offerId,
+                        image: {
+                            imgUrlOf290x290: oneOffer.image.imgUrlOf290x290
+                        },
+                        information: {
+                            detailUrl: oneOffer.information.detailUrl,
+                            simpleSubject: oneOffer.information.simpleSubject
                         }
+                    },
+                    priceAdded: 0,
+                    quantity: 0
+                };
+                for (oneQP of quantityPrices) {
+                    const oneQ = oneQP?.quantity
+                      , oneQPNum = +oneQP.valueString;
+                    if (Infinity === quantityBegin) {
+                        fitQuantityAndPrice.priceAdded = oneQPNum;
+                        fitQuantityAndPrice.quantity = oneQ;
+                        break;
                     } else {
-                        sIdx = oneQ.indexOf('≥');
-                        var lowerQ = +oneQ.substring(sIdx + 1);
-                        if (quantityBegin >= lowerQ) {
-                            //sortedOffersRound1.push(offerId);
-                            aboveThreshold = await compareWithCPT({
-                                priceAdded: offerPriceAdded,
-                                isAdded: Boolean("FREE" === dataJSON?.deliveryFee),
-                                quantity: oneQ,
-                                offer: oneOffer
-                            });
-                            break;
+                        let sIdx = oneQ.indexOf('~');
+                        if (-1 != sIdx) {
+                            const upperQ = +oneQ.substring(sIdx + 1);
+                            if (quantityBegin <= upperQ) {
+                                fitQuantityAndPrice.priceAdded = oneQPNum;
+                                fitQuantityAndPrice.quantity = oneQ;
+                                break;
+                            }
+                        } else {
+                            sIdx = oneQ.indexOf('≥');
+                            const lowerQ = +oneQ.substring(sIdx + 1);
+                            if (quantityBegin >= lowerQ) {
+                                fitQuantityAndPrice.priceAdded = oneQPNum;
+                                fitQuantityAndPrice.quantity = oneQ;
+                                break;
+                            }
                         }
                     }
                 }
@@ -209,6 +223,7 @@ async function sortQuantityPricesInPage(data, sortedBefore, quantityBegin, tabID
                 //                                 "componentType":"@ali/tdmod-od-pc-offer-logistics","data":{
                 //                                 ..."templateId":1,"deliveryFee":"FREE","startAmount":?,"unitWeight":?,
                 //                                 "price":"?","volume":?,"freightInfo":{"unitWeight":?,...}}}}...}
+                const aboveThreshold = await compareWithCPT(fitQuantityAndPrice);
                 if (!aboveThreshold) {
                     ajaxDataArray.push({
                         flow: "general",
@@ -218,7 +233,7 @@ async function sortQuantityPricesInPage(data, sortedBefore, quantityBegin, tabID
                         cityCode: 1099,
                         deliveryFee: dataJSON?.deliveryFee,
                         //window.__INIT_DATA.data["1081181309101"].data.deliveryFee
-                        amount: quantityBegin,
+                        amount: (Infinity !== quantityBegin) ? quantityBegin : 1,
                         //window.__INIT_DATA.data["1081181309101"].data.startAmount
                         templateId: dataJSON?.templateId,
                         //window.__INIT_DATA.data["1081181309101"].data.templateId
@@ -230,7 +245,7 @@ async function sortQuantityPricesInPage(data, sortedBefore, quantityBegin, tabID
                         //window.__INIT_DATA.data["1081181309101"].data.price
                         volume: dataJSON?.volume,
                         //window.__INIT_DATA.data["1081181309101"].data.volume
-                        weight: Math.floor(dataJSON?.unitWeight * quantityBegin * 100) / 100 //window.__INIT_DATA.data["1081181309101"].data.unitWeight * window.__INIT_DATA.data["1081181309101"].data.startAmount
+                        weight: (Infinity !== quantityBegin) ? Math.floor(dataJSON?.unitWeight * quantityBegin * 100) / 100 : dataJSON?.unitWeight //window.__INIT_DATA.data["1081181309101"].data.unitWeight * window.__INIT_DATA.data["1081181309101"].data.startAmount
                     });
                 } else {
                     isLastPage = true;
@@ -241,8 +256,9 @@ async function sortQuantityPricesInPage(data, sortedBefore, quantityBegin, tabID
         if (!encounteredPunishPage) {
             chrome.tabs.sendMessage(tabID, {
                 "ajaxData": ajaxDataArray,
+                "isLastPage": isLastPage,
                 "pageNum": pageNum,
-                "isLastPage": isLastPage
+                "quantityBegin": quantityBegin
             }, (response)=>{
                 console.log(response);
             }
@@ -261,14 +277,14 @@ async function sleep(ms) {
     return new Promise((resolve)=>setTimeout(resolve, ms));
 }
 
-async function compareWithCPT(fod) {
+async function compareWithCPT(iodOrOICO) {
     return new Promise((resolve,reject)=>{
-        chrome.storage.local.get([cptKey], (result)=>{
+        chrome.storage.local.get([CPT_KEY], (result)=>{
             if (chrome.runtime.lastError) {
                 reject(false);
-            } else if (fod.priceAdded <= result[cptKey]) {
+            } else if (iodOrOICO.priceAdded <= result[CPT_KEY]) {
                 chrome.storage.local.set({
-                    ["" + fod.offer.id]: fod
+                    ["" + iodOrOICO.offer.id]: iodOrOICO
                 }, ()=>{}
                 );
                 resolve(false);

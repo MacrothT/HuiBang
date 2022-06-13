@@ -1,21 +1,26 @@
 (function() {
     "use strict";
+    const CPT_KEY = "currentPriceThreshold"
+      , A_I_KEY = "allIOD_IDs"
+      , A_O_KEY = "allOICO_IDs";
     window.addEventListener("DOMContentLoaded", (event)=>injectScript());
 
     function injectScript() {
-        let htmlHead = document.head
-          , lastC = htmlHead.lastChild;
-        const idConst = "Huibang_inject";
+        const H_HEAD = document.head
+          , ID_CONST = "Huibang_inject";
         try {
-            if (lastC && lastC?.id !== idConst) {
-                let temp = document.createElement("script");
-                //tagName, also nodeName
-                temp.id = idConst;
-                temp.type = "text/javascript";
-                // getURL() will return link like: chrome-extension://dkfignnomipjjghdpnojdoamdmaelcck/js/inject.js
-                temp.src = chrome.runtime.getURL("js/inject.js");
-                htmlHead.append(temp);
+            for (let oneC of H_HEAD.children) {
+                if (ID_CONST === oneC.id) {
+                    break;
+                }
             }
+            let temp = document.createElement("script");
+            //tagName, also nodeName
+            temp.id = ID_CONST;
+            temp.type = "text/javascript";
+            // getURL() will return link like: chrome-extension://dkfignnomipjjghdpnojdoamdmaelcck/js/inject.js
+            temp.src = chrome.runtime.getURL("js/inject.js");
+            H_HEAD.prepend(temp);
         } catch (error) {
             console.error(error);
         }
@@ -37,7 +42,6 @@
                         chrome.storage.local.set({
                             [id]: iodOrOICO
                         }, ()=>{
-                            const CPT_KEY = "currentPriceThreshold";
                             chrome.storage.local.get([CPT_KEY], (result)=>{
                                 if (iodOrOICO.priceAdded < result[CPT_KEY]) {
                                     chrome.storage.local.set({
@@ -52,34 +56,19 @@
                     }
                     );
                 } else if (event.data?.batchIDs) {
-                    const isIODs = !!(Infinity !== event.data?.quantityBegin);
+                    const isIODs = !!(Number.MIN_SAFE_INTEGER !== event.data?.quantityBegin);
                     //isIODs === true ? "Initial Order Discounts" : "One-Item Consign Offers"
-                    const allIODsKey = "allIOD_IDs"
-                      , allIODorOICOsKey = isIODs ? allIODsKey : "allOICO_IDs";
+                    const allIODorOICOsKey = isIODs ? A_I_KEY : A_O_KEY;
                     // define default values: [] by passing an object
                     chrome.storage.local.get({
                         [allIODorOICOsKey]: []
                     }, (result)=>{
                         let allIDs = result[allIODorOICOsKey].concat(event.data.batchIDs);
-                        if (isIODs || !event.data?.isLastPage) {
-                            chrome.storage.local.set({
-                                [allIODorOICOsKey]: allIDs
-                            }, ()=>console.log(`Number of ${isIODs ? "IOD" : "OICO"} IDs added to: ${allIDs.length} at page ${event.data?.pageNum}`));
-                        } else {
-                            formArrayFromIDs(allIODsKey).then((iodArray)=>{
-                                formArrayFromIDs(allIODorOICOsKey).then((oicoArray)=>{
-                                    const allArrays = [iodArray.sort((a,b)=>a.priceAdded - b.priceAdded), oicoArray.sort((a,b)=>a.priceAdded - b.priceAdded)];
-                                    let dispHTML = toDispHTML(allArrays);
-                                    const rsWindow = window.open("", `Huibang排序结果：`);
-                                    //${window.data.pageConfigData.originalKeywords}`);
-                                    //rsWindow.document.body.innerHTML = dispHTML;
-                                    rsWindow.document.write(dispHTML);
-                                    //console.log(dispHTML);
-                                    rsWindow.document.close();
-                                }
-                                ).catch((e)=>console.error(e));
-                            }
-                            );
+                        chrome.storage.local.set({
+                            [allIODorOICOsKey]: allIDs
+                        }, ()=>console.log(`Number of ${isIODs ? "IOD" : "OICO"} IDs added to: ${allIDs.length} at page ${event.data?.pageNum}`));
+                        if (!isIODs && event.data?.isLastPage) {
+                            OpenStoredOffersTab();
                         }
                     }
                     );
@@ -91,9 +80,29 @@
     }
     , true);
 
+    function OpenStoredOffersTab() {
+        formArrayFromIDs(A_I_KEY).then((iodArray)=>{
+            formArrayFromIDs(A_O_KEY).then((oicoArray)=>{
+                const allArrays = [iodArray.sort((a,b)=>a.priceAdded - b.priceAdded), oicoArray.sort((a,b)=>a.priceAdded - b.priceAdded)];
+                let dispHTML = toDispHTML(allArrays);
+                const rsWindow = window.open("", `Huibang排序结果：`);
+                //${window.data.pageConfigData.originalKeywords}`);
+                //rsWindow.document.body.innerHTML = dispHTML;
+                rsWindow.document.write(dispHTML);
+                //console.log(dispHTML);
+                rsWindow.document.close();
+            }
+            ).catch((e)=>console.error(e));
+        }
+        );
+    }
+
     async function formArrayFromIDs(idArrayKey) {
         return new Promise((resolve)=>{
-            chrome.storage.local.get([idArrayKey], (result)=>{
+            // define default values: [] by passing an object while using local.get()
+            chrome.storage.local.get({
+                [idArrayKey]: []
+            }, (result)=>{
                 // DO NOT local.get(result[idArrayKey]) here, get them one by one with setTimeout()
                 Promise.all((result[idArrayKey]).map((oneID)=>{
                     // Immediately return a promise and start asynchronous work
@@ -131,12 +140,13 @@
          * offerId: ?, price: ?, volume: ?, weight: ? }, {...},...) */
         let ajaxData = request?.ajaxData;
         if (ajaxData && ajaxData.length !== 0) {
+            //injectScript();
             //console.log(ajaxData);
-            injectScript();
-            window.postMessage(request, //{"ajaxData": ajaxData, "pageNum": request.pageNum, "isLastPage": request.isLastPage}, 
-            "https://s.1688.com");
+            //{"ajaxData": ajaxData, "pageNum": request.pageNum, "isLastPage": request.isLastPage, "quantityBegin": request.quantityBegin}
+            window.postMessage(request, "https://s.1688.com");
             //"*");
-            //await new Promise(resolve => setTimeout(resolve, 10000)).then(()=> {if (lastC && lastC?.id === idConst){ lastC.remove(); }});
+        } else if (CPT_KEY === request) {
+            OpenStoredOffersTab();
         }
         sendResponse("Aloha! Remember to call sendResponse(...) if you specify the responseCallback parameter for sendMessage()!");
         //return true;  // Need responding synchronously here.

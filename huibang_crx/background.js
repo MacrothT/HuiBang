@@ -1,9 +1,12 @@
-////importScripts('script1.js', 'script2.js');
-const CPT_KEY = "currentPriceThreshold";
+////importScripts("common.js");
+const CPT_KEY = "currentPriceThreshold"
+  , ACT_OPEN = "open";
+////import*as Common from "./common.js";
 
 chrome.runtime.onMessage.addListener((request,sender,sendResponse)=>{
-    let searchURL = request?.searchURL;
-    if (searchURL && 0 !== searchURL.length && request?.iodSuffix && 0 !== request.iodSuffix.length) {
+    const searchURL = request?.searchURL
+      , iodSfx = request?.iodSuffix;
+    if (searchURL && 0 !== searchURL.length && iodSfx && 0 !== iodSfx.length) {
         //const iodURL = searchURL + request.iodSuffix;
         //console.log(iodURL);
         try {
@@ -15,18 +18,30 @@ chrome.runtime.onMessage.addListener((request,sender,sendResponse)=>{
                 [CPT_KEY]: Number.MAX_SAFE_INTEGER
             }, ()=>{}
             );
+            //Load Initial Order Discounts
+            const START = iodSfx.indexOf("&quantityBegin=")
+              , END = iodSfx.indexOf('&', START + 1)
+              , quantityBegin = +iodSfx.substring(START + 15, END);
+            //String->Int
+            (async()=>{
+                await extractORD(searchURL + iodSfx, quantityBegin, request.tabID);
+                chrome.runtime.sendMessage({
+                    progress: "开始处理第二批"
+                });
+                //Load One Item Consign Offers
+                const oicoURL = searchURL + "&sortType=price&descendOrder=false&filt=y&feature=100020070:33097";
+                //quantity===Number.MIN_SAFE_INTEGER here is a contract, a signal of OICO, do NOT change it alone
+                await extractORD(oicoURL, Number.MIN_SAFE_INTEGER, request.tabID);
+            }
+            )();
         } catch (error) {
             console.error(error);
+        } finally {
+            sendResponse();
         }
-        //async()=>{await...
-        loadInitialOrderDiscounts(searchURL + request.iodSuffix, request.tabID).then((searchURL,request)=>{
-            chrome.runtime.sendMessage({
-                progress: "开始处理第二批"
-            });
-            //Load One Item Consign Offers//FIXME
-            //extractORD(searchURL, Infinity, request.tabID);
-        }
-        ).catch((e)=>console.error(e)).finally(()=>sendResponse());
+    } else if (ACT_OPEN === request?.action) {
+        openStoredOffersTab(request.tabID);
+        sendResponse();
     }
     //return true;
     // Add this so that it will respond asynchronously.
@@ -46,14 +61,6 @@ chrome.runtime.onMessage.addListener((request,sender,sendResponse)=>{
     }
 });*/
 
-async function loadInitialOrderDiscounts(iodURL, tabID) {
-    const START = iodURL.indexOf("&quantityBegin=")
-      , END = iodURL.indexOf('&', START + 1)
-      , quantityBegin = +iodURL.substring(START + 15, END);
-    //String->Int
-    await extractORD(iodURL, quantityBegin, tabID);
-}
-
 async function fetchHTML(url) {
     const response = await fetch(url, {
         credentials: 'include'
@@ -71,14 +78,14 @@ async function fetchHTML(url) {
 //连续从fetch的返回页中找到offer数据，聚合多个页面中符合条件的offer形成一个结果集。
 //每个HTML文本中均有...<html...>...<body...>...<script>... window.data.offerresultData = successDataCheck({..."data":{..."pageCount":..."totalCount":...}});
 //...</script>...</body>...</html>
-async function extractORD(searchURL, quantityBegin, tabID) {
+async function extractORD(url, quantityBegin, tabID) {
     let pageNum = 1
       , pageCnt = 0
       , isLastPage = true
       , sortedInMultiplePages = 0
       , toNextPage = true;
     do {
-        const PAGE_URL = searchURL + `&beginPage=${pageNum}`;
+        const PAGE_URL = url + `&beginPage=${pageNum}`;
         //模板字符串必须用`不能用"或'
         const HTML = await fetchHTML(PAGE_URL);
         const START = HTML.indexOf('(', HTML.indexOf("window.data.offerresultData"));
@@ -110,7 +117,7 @@ async function extractORD(searchURL, quantityBegin, tabID) {
                 });
                 break;
             } else if (0 === pageCnt) {
-                const HINT = (Infinity !== quantityBegin) ? `在指定的 关键词 及 起批量：${quantityBegin} 下没有首单优惠的货源。` : "在指定的 关键词 下没有一件代发的货源。";
+                const HINT = (Number.MIN_SAFE_INTEGER !== quantityBegin) ? `在指定的 关键词 及 起批量：${quantityBegin} 下没有首单优惠的货源。` : "在指定的 关键词 下没有一件代发的货源。";
                 console.log(HINT);
                 chrome.runtime.sendMessage({
                     "progress": HINT
@@ -122,9 +129,22 @@ async function extractORD(searchURL, quantityBegin, tabID) {
         const PAGE_RESULT = await sortQuantityPricesInPage(jsonObj.data, sortedInMultiplePages, quantityBegin, tabID, pageNum, isLastPage);
         sortedInMultiplePages += PAGE_RESULT.addedCount;
         toNextPage = (0 !== PAGE_RESULT.addedCount) && (PAGE_RESULT.addedCount === PAGE_RESULT.offersCount);
-        pageNum++;
-        await sleep(3000);
+        if (toNextPage) {
+            pageNum++;
+            await sleep(5000 + Math.floor(Math.random() * 3500));
+        } else {
+            openStoredOffersTab(tabID);
+            break;
+        }
     } while (!isLastPage && toNextPage);
+}
+
+function openStoredOffersTab(tabID) {
+    // Temporarily use CPT_KEY as a message to open new window showing stored offers.
+    chrome.tabs.sendMessage(tabID, CPT_KEY, (response)=>{
+        console.log(response);
+    }
+    );
 }
 
 async function sortQuantityPricesInPage(data, sortedBefore, quantityBegin, tabID, pageNum, isLastPage) {
@@ -141,13 +161,13 @@ async function sortQuantityPricesInPage(data, sortedBefore, quantityBegin, tabID
             });
             processed++;
             let oneODUrl = oneOffer?.information?.detailUrl;
-            await sleep(2500);
+            await sleep(4500 + Math.floor(Math.random() * 3500));
             const oneOfferHTML = await fetchHTML(oneODUrl);
             //Return page of fetch(oneODUrl) includes window.__INIT_DATA={"data":{...},"globalData":{...},...}\r\n</script>
             let initDataIdx = oneOfferHTML.indexOf("window.__INIT_DATA");
             if (-1 === initDataIdx) {
                 encounteredPunishPage = true;
-                const errTip = "<p>Error：可能遇到了Punish页面，任务已中止。等待一段时间、或重新登录后重试。</p>";
+                const errTip = "<p>Error：可能遇到了Punish页面，任务已中止。等待一段时间、或重新登录后重试。正在显示已处理的记录……</p>";
                 chrome.runtime.sendMessage({
                     error: errTip
                 });
@@ -186,7 +206,7 @@ async function sortQuantityPricesInPage(data, sortedBefore, quantityBegin, tabID
                 for (oneQP of quantityPrices) {
                     const oneQ = oneQP?.quantity
                       , oneQPNum = +oneQP.valueString;
-                    if (Infinity === quantityBegin) {
+                    if (Number.MIN_SAFE_INTEGER === quantityBegin) {
                         fitQuantityAndPrice.priceAdded = oneQPNum;
                         fitQuantityAndPrice.quantity = oneQ;
                         break;
@@ -233,7 +253,7 @@ async function sortQuantityPricesInPage(data, sortedBefore, quantityBegin, tabID
                         cityCode: 1099,
                         deliveryFee: dataJSON?.deliveryFee,
                         //window.__INIT_DATA.data["1081181309101"].data.deliveryFee
-                        amount: (Infinity !== quantityBegin) ? quantityBegin : 1,
+                        amount: (Number.MIN_SAFE_INTEGER !== quantityBegin) ? quantityBegin : 1,
                         //window.__INIT_DATA.data["1081181309101"].data.startAmount
                         templateId: dataJSON?.templateId,
                         //window.__INIT_DATA.data["1081181309101"].data.templateId
@@ -245,7 +265,7 @@ async function sortQuantityPricesInPage(data, sortedBefore, quantityBegin, tabID
                         //window.__INIT_DATA.data["1081181309101"].data.price
                         volume: dataJSON?.volume,
                         //window.__INIT_DATA.data["1081181309101"].data.volume
-                        weight: (Infinity !== quantityBegin) ? Math.floor(dataJSON?.unitWeight * quantityBegin * 100) / 100 : dataJSON?.unitWeight //window.__INIT_DATA.data["1081181309101"].data.unitWeight * window.__INIT_DATA.data["1081181309101"].data.startAmount
+                        weight: (Number.MIN_SAFE_INTEGER !== quantityBegin) ? Math.floor(dataJSON?.unitWeight * quantityBegin * 100) / 100 : dataJSON?.unitWeight //window.__INIT_DATA.data["1081181309101"].data.unitWeight * window.__INIT_DATA.data["1081181309101"].data.startAmount
                     });
                 } else {
                     isLastPage = true;
@@ -253,18 +273,22 @@ async function sortQuantityPricesInPage(data, sortedBefore, quantityBegin, tabID
                 }
             }
         }
+        let msg = CPT_KEY;
+        // Temporarily use CPT_KEY as a message to open new window showing stored offers.
         if (!encounteredPunishPage) {
-            chrome.tabs.sendMessage(tabID, {
+            msg = {
                 "ajaxData": ajaxDataArray,
                 "isLastPage": isLastPage,
                 "pageNum": pageNum,
                 "quantityBegin": quantityBegin
-            }, (response)=>{
-                console.log(response);
-            }
-            );
-        } else
+            };
+        } else {
             offersCountInPage = 0;
+        }
+        chrome.tabs.sendMessage(tabID, msg, (response)=>{
+            console.log(response);
+        }
+        );
     }
     return {
         "addedCount": ajaxDataArray.length,

@@ -1,7 +1,7 @@
 document.body.style.border = "2px solid #E5F2F2";
+const ACT_OPEN = "open";
 
-const searchBtn = document.querySelector('button[name="search"]');
-searchBtn.onclick = function() {
+document.querySelector('button[name="search"]').onclick = function() {
     //WARN: chrome.tabs.getCurrent() NOT available here!
     chrome.tabs.query({
         active: true,
@@ -13,11 +13,12 @@ searchBtn.onclick = function() {
             errorDiv.style.display = "none";
             try {
                 chrome.runtime.sendMessage({
-                    searchURL: `${url}`,
+                    searchURL: url,
                     iodSuffix: `&quantityBegin=${quantityBegin.value}&sortType=price&descendOrder=false&filt=y&filtMemberTags=1445761`,
                     //#sm-filtbar`,
                     tabID: tabs[0].id
                 }, (response)=>{}
+                //See https://stackoverflow.com/questions/59914490/how-to-handle-unchecked-runtime-lasterror-the-message-port-closed-before-a-res/59915897
                 );
                 //console.log(searchURL);
             } catch (error) {
@@ -36,6 +37,27 @@ function display(errorText) {
     const errorDiv = document.getElementById("error-content");
     errorDiv.innerHTML = `${errorText}`;
     errorDiv.style.display = "block";
+}
+
+document.querySelector('button[name="open"]').onclick = function() {
+    document.getElementById("error-content").style.display = "none";
+    //WARN: chrome.tabs.getCurrent() NOT available here!
+    chrome.tabs.query({
+        active: true,
+        currentWindow: true
+    }, (tabs)=>{
+        try {
+            chrome.runtime.sendMessage({
+                action: ACT_OPEN,
+                tabID: tabs[0].id
+            }, (response)=>{}
+            );
+        } catch (error) {
+            display(error);
+            console.error(error);
+        }
+    }
+    );
 }
 
 chrome.runtime.onMessage.addListener((request,sender,sendResponse)=>{

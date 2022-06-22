@@ -63,7 +63,7 @@ chrome.runtime.onMessage.addListener((request,sender,sendResponse)=>{
 
 async function fetchHTML(url) {
     const response = await fetch(url, {
-        credentials: 'include'
+        credentials: "include"
     });
     if (response.ok) {
         return await response.text();
@@ -84,6 +84,7 @@ async function extractORD(url, quantityBegin, tabID) {
       , isLastPage = true
       , sortedInMultiplePages = 0
       , toNextPage = true;
+    const IS_IOD = !!(Number.MIN_SAFE_INTEGER !== quantityBegin);
     do {
         const PAGE_URL = url + `&beginPage=${pageNum}`;
         //模板字符串必须用`不能用"或'
@@ -113,14 +114,14 @@ async function extractORD(url, quantityBegin, tabID) {
                 const TIP = 'No "data" or "pageCount" in offerresultData';
                 console.warn(`${TIP}: ${ORD_STRING}`);
                 chrome.runtime.sendMessage({
-                    "error": TIP
+                    error: TIP
                 });
                 break;
             } else if (0 === pageCnt) {
-                const HINT = (Number.MIN_SAFE_INTEGER !== quantityBegin) ? `在指定的 关键词 及 起批量：${quantityBegin} 下没有首单优惠的货源。` : "在指定的 关键词 下没有一件代发的货源。";
-                console.log(HINT);
+                //const HINT = IS_IOD ? `在指定的 关键词 及 起批量：${quantityBegin} 下没有首单优惠的货源。` : "在指定的 关键词 下没有一件代发的货源。";
+                //console.log(HINT);
                 chrome.runtime.sendMessage({
-                    "progress": HINT
+                    progress: `在指定的 关键词${IS_IOD ? " 及 起批量：" + quantityBegin : ""} 下没有${IS_IOD ? "首单优惠" : "一件代发"}的货源。`//HINT
                 });
                 break;
             }
@@ -128,36 +129,48 @@ async function extractORD(url, quantityBegin, tabID) {
         isLastPage = !!(pageNum === pageCnt);
         const PAGE_RESULT = await sortQuantityPricesInPage(jsonObj.data, sortedInMultiplePages, quantityBegin, tabID, pageNum, isLastPage);
         sortedInMultiplePages += PAGE_RESULT.addedCount;
-        toNextPage = (0 !== PAGE_RESULT.addedCount) && (PAGE_RESULT.addedCount === PAGE_RESULT.offersCount);
+        toNextPage = !isLastPage && (0 !== PAGE_RESULT.addedCount) && (PAGE_RESULT.addedCount === PAGE_RESULT.offersCount);
         if (toNextPage) {
-            pageNum++;
-            await sleep(5000 + Math.floor(Math.random() * 3500));
+            if (!isLastPage) {
+                pageNum++;
+                await sleep(5000 + Math.floor(Math.random() * 3500));
+            } else {
+                console.error(new Error("Code running into impossible business case!"));
+            }
         } else {
-            openStoredOffersTab(tabID);
-            break;
+            if (!IS_IOD) {
+                openStoredOffersTab(tabID);
+            }
         }
     } while (!isLastPage && toNextPage);
 }
 
 function openStoredOffersTab(tabID) {
-    // Temporarily use CPT_KEY as a message to open new window showing stored offers.
-    chrome.tabs.sendMessage(tabID, CPT_KEY, (response)=>{
-        console.log(response);
+    // use null-safe operator since chrome.runtime is lazy inited and might return undefined
+    if (chrome.runtime?.id) {
+        try {
+            // Temporarily use CPT_KEY as a message to open new window showing stored offers.
+            chrome.tabs.sendMessage(tabID, CPT_KEY, (response)=>{
+                console.log(response);
+            }
+            );
+        } catch (err) {
+            console.error(err);
+        }
     }
-    );
 }
 
 async function sortQuantityPricesInPage(data, sortedBefore, quantityBegin, tabID, pageNum, isLastPage) {
-    //let sortedOffersRound1 = new Array();
     let offersCountInPage = data?.offerList?.length
       , ajaxDataArray = new Array();
     if (offersCountInPage && (0 < offersCountInPage)) {
         let processed = sortedBefore + 1
           , offersCountForNow = sortedBefore + offersCountInPage
           , encounteredPunishPage = false;
+        const IS_IOD = !!(Number.MIN_SAFE_INTEGER !== quantityBegin);
         for (let oneOffer of data.offerList) {
             chrome.runtime.sendMessage({
-                "progress": `正在处理第 ${processed} / ${offersCountForNow} 个，耐心等待……`
+                progress: `正在处理第 ${processed} / ${offersCountForNow} 个，耐心等待……`
             });
             processed++;
             let oneODUrl = oneOffer?.information?.detailUrl;
@@ -206,7 +219,7 @@ async function sortQuantityPricesInPage(data, sortedBefore, quantityBegin, tabID
                 for (oneQP of quantityPrices) {
                     const oneQ = oneQP?.quantity
                       , oneQPNum = +oneQP.valueString;
-                    if (Number.MIN_SAFE_INTEGER === quantityBegin) {
+                    if (!IS_IOD) {
                         fitQuantityAndPrice.priceAdded = oneQPNum;
                         fitQuantityAndPrice.quantity = oneQ;
                         break;
@@ -253,7 +266,7 @@ async function sortQuantityPricesInPage(data, sortedBefore, quantityBegin, tabID
                         cityCode: 1099,
                         deliveryFee: dataJSON?.deliveryFee,
                         //window.__INIT_DATA.data["1081181309101"].data.deliveryFee
-                        amount: (Number.MIN_SAFE_INTEGER !== quantityBegin) ? quantityBegin : 1,
+                        amount: IS_IOD ? quantityBegin : 1,
                         //window.__INIT_DATA.data["1081181309101"].data.startAmount
                         templateId: dataJSON?.templateId,
                         //window.__INIT_DATA.data["1081181309101"].data.templateId
@@ -265,7 +278,7 @@ async function sortQuantityPricesInPage(data, sortedBefore, quantityBegin, tabID
                         //window.__INIT_DATA.data["1081181309101"].data.price
                         volume: dataJSON?.volume,
                         //window.__INIT_DATA.data["1081181309101"].data.volume
-                        weight: (Number.MIN_SAFE_INTEGER !== quantityBegin) ? Math.floor(dataJSON?.unitWeight * quantityBegin * 100) / 100 : dataJSON?.unitWeight //window.__INIT_DATA.data["1081181309101"].data.unitWeight * window.__INIT_DATA.data["1081181309101"].data.startAmount
+                        weight: IS_IOD ? Math.floor(dataJSON?.unitWeight * quantityBegin * 100) / 100 : dataJSON?.unitWeight //window.__INIT_DATA.data["1081181309101"].data.unitWeight * window.__INIT_DATA.data["1081181309101"].data.startAmount
                     });
                 } else {
                     isLastPage = true;
@@ -277,24 +290,29 @@ async function sortQuantityPricesInPage(data, sortedBefore, quantityBegin, tabID
         // Temporarily use CPT_KEY as a message to open new window showing stored offers.
         if (!encounteredPunishPage) {
             msg = {
-                "ajaxData": ajaxDataArray,
-                "isLastPage": isLastPage,
-                "pageNum": pageNum,
-                "quantityBegin": quantityBegin
+                ajaxData: ajaxDataArray,
+                isLastPage: isLastPage,
+                pageNum: pageNum,
+                quantityBegin: quantityBegin
             };
-        } else {
-            offersCountInPage = 0;
         }
-        chrome.tabs.sendMessage(tabID, msg, (response)=>{
-            console.log(response);
+        // else {            offersCountInPage = 0;        }
+        // use null-safe operator since chrome.runtime is lazy inited and might return undefined
+        if (chrome.runtime?.id) {
+            try {
+                chrome.tabs.sendMessage(tabID, msg, (response)=>{
+                    console.log(response);
+                }
+                );
+            } catch (err) {
+                console.error(err);
+            }
         }
-        );
     }
     return {
-        "addedCount": ajaxDataArray.length,
-        "offersCount": offersCountInPage
+        addedCount: ajaxDataArray.length,
+        offersCount: offersCountInPage
     };
-    //return sortedOffersRound1;
 }
 
 async function sleep(ms) {

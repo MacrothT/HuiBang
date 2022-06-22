@@ -24,7 +24,8 @@
                                 if (t.success && t && t.data && t.data.costs && t.data.costs[0]) {
                                     window.postMessage({
                                         id: oneAjax?.offerId,
-                                        cost: t.data.costs[0]?.cost
+                                        cost: t.data.costs[0]?.cost,
+                                        quantityBegin: event.data?.quantityBegin
                                     }, event.origin);
                                     resolve(oneAjax?.offerId);
                                 } else {
@@ -47,10 +48,10 @@
             }
             )).then((results)=>{
                 window.postMessage({
-                    "batchIDs": results.map((oneResult)=>"fulfilled" === oneResult.status ? oneResult.value : oneResult.reason),
-                    "isLastPage": event.data?.isLastPage,
-                    "pageNum": event.data?.pageNum,
-                    "quantityBegin": event.data?.quantityBegin
+                    batchIDs: results.map((oneResult)=>"fulfilled" === oneResult.status ? oneResult.value : oneResult.reason),
+                    isLastPage: event.data?.isLastPage,
+                    pageNum: event.data?.pageNum,
+                    quantityBegin: event.data?.quantityBegin
                 }, event.origin);
             }
             );

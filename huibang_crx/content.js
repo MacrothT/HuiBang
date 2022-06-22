@@ -30,6 +30,7 @@
     window.addEventListener("message", (event)=>{
         if (event.origin === "https://s.1688.com") {
             try {
+                const IS_IOD = !!(Number.MIN_SAFE_INTEGER !== event.data?.quantityBegin);
                 if (event.data?.id && event.data?.cost) {
                     let id = "" + event.data.id;
                     chrome.storage.local.get([id], (result)=>{
@@ -42,23 +43,24 @@
                         chrome.storage.local.set({
                             [id]: iodOrOICO
                         }, ()=>{
-                            chrome.storage.local.get([CPT_KEY], (result)=>{
-                                if (iodOrOICO.priceAdded < result[CPT_KEY]) {
-                                    chrome.storage.local.set({
-                                        [CPT_KEY]: iodOrOICO.priceAdded
-                                    }, ()=>{}
-                                    );
+                            if (IS_IOD) {
+                                chrome.storage.local.get([CPT_KEY], (result)=>{
+                                    if (iodOrOICO.priceAdded < result[CPT_KEY]) {
+                                        chrome.storage.local.set({
+                                            [CPT_KEY]: iodOrOICO.priceAdded
+                                        }, ()=>{}
+                                        );
+                                    }
                                 }
+                                );
                             }
-                            );
                         }
                         );
                     }
                     );
                 } else if (event.data?.batchIDs) {
-                    const isIODs = !!(Number.MIN_SAFE_INTEGER !== event.data?.quantityBegin);
-                    //isIODs === true ? "Initial Order Discounts" : "One-Item Consign Offers"
-                    const allIODorOICOsKey = isIODs ? A_I_KEY : A_O_KEY;
+                    //IS_IOD === true ? "Initial Order Discounts" : "One-Item Consign Offers"
+                    const allIODorOICOsKey = IS_IOD ? A_I_KEY : A_O_KEY;
                     // define default values: [] by passing an object
                     chrome.storage.local.get({
                         [allIODorOICOsKey]: []
@@ -66,8 +68,8 @@
                         let allIDs = result[allIODorOICOsKey].concat(event.data.batchIDs);
                         chrome.storage.local.set({
                             [allIODorOICOsKey]: allIDs
-                        }, ()=>console.log(`Number of ${isIODs ? "IOD" : "OICO"} IDs added to: ${allIDs.length} at page ${event.data?.pageNum}`));
-                        if (!isIODs && event.data?.isLastPage) {
+                        }, ()=>console.log(`Number of ${IS_IOD ? "IOD" : "OICO"} IDs added to: ${allIDs.length} at page ${event.data?.pageNum}`));
+                        if (!IS_IOD && event.data?.isLastPage) {
                             OpenStoredOffersTab();
                         }
                     }
@@ -112,13 +114,10 @@
                             chrome.storage.local.get([oneID], (result)=>{
                                 // Pass any observed errors down the promise chain.
                                 if (chrome.runtime.lastError) {
-                                    return reject(chrome.runtime.lastError);
-                                }
-                                // Pass the data retrieved from storage down the promise chain.
-                                let oneIODorOICO = result[oneID];
-                                if (oneIODorOICO?.isAdded) {
+                                    reject(chrome.runtime.lastError);
+                                } else if (result[oneID]?.isAdded) {
                                     clearTimeout(timeoutID);
-                                    resolve(oneIODorOICO);
+                                    resolve(result[oneID]);
                                 }
                             }
                             )
@@ -127,7 +126,7 @@
                     }
                     );
                 }
-                )).then((iodOrOICOArray)=>resolve(iodOrOICOArray));
+                )).then((iodOrOICOArray)=>resolve(iodOrOICOArray)).catch(err=>console.error(err));
             }
             );
         }

@@ -15,7 +15,8 @@
         "webRequest"
     ],
     "background": {
-        "service_worker": "background.js"
+        "service_worker": "background.js",
+        "#type": "module"
     },
     "action": {
         "default_icon": {
@@ -31,10 +32,6 @@
             "#all_frames": true,
             "matches": [
                 "*://*.1688.com/*"
-            ],
-            "#js": [
-                "jquery-3.6.0.min.js",
-                "content.js"
             ],
             "js": [
                 "content.js"
@@ -52,6 +49,7 @@
         "64": "img/pa-64.png",
         "128": "img/pa-128.png"
     },
+    "minimum_chrome_version": "92",
     "omnibox": {
         "keyword": "price"
     },

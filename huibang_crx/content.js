@@ -32,28 +32,26 @@
             try {
                 const IS_IOD = !!(Number.MIN_SAFE_INTEGER !== event.data?.quantityBegin);
                 if (event.data?.id && event.data?.cost) {
-                    let id = "" + event.data.id;
-                    chrome.storage.local.get([id], (result)=>{
-                        let iodOrOICO = result[id];
+                    const ID = "" + event.data.id;
+                    chrome.storage.local.get([ID], (result)=>{
+                        let iodOrOICO = result[ID];
                         //console.log("storage value is ", iodOrOICO);
                         if (!iodOrOICO.isAdded) {
                             iodOrOICO.priceAdded = iodOrOICO.priceAdded + Number(event.data.cost);
                         }
                         iodOrOICO.isAdded = true;
                         chrome.storage.local.set({
-                            [id]: iodOrOICO
+                            [ID]: iodOrOICO
                         }, ()=>{
-                            if (IS_IOD) {
-                                chrome.storage.local.get([CPT_KEY], (result)=>{
-                                    if (iodOrOICO.priceAdded < result[CPT_KEY]) {
-                                        chrome.storage.local.set({
-                                            [CPT_KEY]: iodOrOICO.priceAdded
-                                        }, ()=>{}
-                                        );
-                                    }
+                            chrome.storage.local.get([CPT_KEY], (result)=>{
+                                if ((IS_IOD && iodOrOICO.priceAdded < result[CPT_KEY]) || (!IS_IOD && Number.MAX_SAFE_INTEGER === result[CPT_KEY])) {
+                                    chrome.storage.local.set({
+                                        [CPT_KEY]: iodOrOICO.priceAdded
+                                    }, ()=>{}
+                                    );
                                 }
-                                );
                             }
+                            );
                         }
                         );
                     }

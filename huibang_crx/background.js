@@ -133,7 +133,7 @@ async function extractORD(url, quantityBegin, tabID) {
         if (toNextPage) {
             if (!isLastPage) {
                 pageNum++;
-                await sleep(5000 + Math.floor(Math.random() * 3500));
+                await sleep(4500 + Math.floor(Math.random() * 4000));
             } else {
                 console.error(new Error("Code running into impossible business case!"));
             }
@@ -174,7 +174,7 @@ async function sortQuantityPricesInPage(data, sortedBefore, quantityBegin, tabID
             });
             processed++;
             let oneODUrl = oneOffer?.information?.detailUrl;
-            await sleep(4500 + Math.floor(Math.random() * 3500));
+            await sleep(4000 + Math.floor(Math.random() * 3000));
             const oneOfferHTML = await fetchHTML(oneODUrl);
             //Return page of fetch(oneODUrl) includes window.__INIT_DATA={"data":{...},"globalData":{...},...}\r\n</script>
             let initDataIdx = oneOfferHTML.indexOf("window.__INIT_DATA");

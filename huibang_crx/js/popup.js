@@ -11,10 +11,15 @@ document.querySelector('button[name="search"]').onclick = function() {
           , errorDiv = document.getElementById("error-content");
         if (url?.startsWith("https://s.1688.com/selloffer/offer_search.htm?keywords=")) {
             errorDiv.style.display = "none";
+            let iodURLParams = `&quantityBegin=${quantityBegin.value}&sortType=price&descendOrder=false&filt=y&filtMemberTags=1445761`;
+            //if (0 !== priceStart.value) {
+            //    iodURLParams += `&priceStart=${priceStart.value}`;
+            //}
             try {
                 chrome.runtime.sendMessage({
                     searchURL: url,
-                    iodSuffix: `&quantityBegin=${quantityBegin.value}&sortType=price&descendOrder=false&filt=y&filtMemberTags=1445761`,
+                    iodSuffix: iodURLParams,
+                    priceStart: priceStart.value,
                     //#sm-filtbar`,
                     tabID: tabs[0].id
                 }, (response)=>{}

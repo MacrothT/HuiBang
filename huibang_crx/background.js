@@ -4,8 +4,8 @@ const CPT_KEY = "currentPriceThreshold"
 ////import*as Common from "./common.js";
 
 chrome.runtime.onMessage.addListener((request,sender,sendResponse)=>{
-    const searchURL = request?.searchURL
-      , iodSfx = request?.iodSuffix;
+    let searchURL = request?.searchURL;
+    const iodSfx = request?.iodSuffix;
     if (searchURL && 0 !== searchURL.length && iodSfx && 0 !== iodSfx.length) {
         //const iodURL = searchURL + request.iodSuffix;
         //console.log(iodURL);
@@ -24,14 +24,20 @@ chrome.runtime.onMessage.addListener((request,sender,sendResponse)=>{
               , quantityBegin = +iodSfx.substring(START + 15, END);
             //String->Int
             (async()=>{
+                const pStart = +request?.priceStart;
+                let oicoSfx = "&sortType=price&descendOrder=false&filt=y&feature=100020070:33097";
+                if (0 !== pStart) {
+                    searchURL += `&priceStart=${pStart}`;
+                    oicoSfx += `&priceStart=${pStart}`;
+                }
                 await extractORD(searchURL + iodSfx, quantityBegin, request.tabID);
                 chrome.runtime.sendMessage({
                     progress: "开始处理第二批"
                 });
                 //Load One Item Consign Offers
-                const oicoURL = searchURL + "&sortType=price&descendOrder=false&filt=y&feature=100020070:33097";
+                //const oicoURL = searchURL + "&sortType=price&descendOrder=false&filt=y&feature=100020070:33097";
                 //quantity===Number.MIN_SAFE_INTEGER here is a contract, a signal of OICO, do NOT change it alone
-                await extractORD(oicoURL, Number.MIN_SAFE_INTEGER, request.tabID);
+                await extractORD(searchURL + oicoSfx, Number.MIN_SAFE_INTEGER, request.tabID);
             }
             )();
         } catch (error) {

@@ -35,9 +35,10 @@
                     const ID = "" + event.data.id;
                     chrome.storage.local.get([ID], (result)=>{
                         let iodOrOICO = result[ID];
-                        //console.log("storage value is ", iodOrOICO);
+                        //console.debug("storage value is ", iodOrOICO);
                         if (!iodOrOICO.isAdded) {
-                            iodOrOICO.priceAdded = iodOrOICO.priceAdded + Number(event.data.cost);
+                            //console.debug("ID:" + ID + " priceAdded: " + iodOrOICO.priceAdded + " +cost:" + event.data.cost);
+                            iodOrOICO.priceAdded = (+iodOrOICO.priceAdded) + Number(event.data.cost);
                         }
                         iodOrOICO.isAdded = true;
                         chrome.storage.local.set({
@@ -89,7 +90,7 @@
                 //${window.data.pageConfigData.originalKeywords}`);
                 //rsWindow.document.body.innerHTML = dispHTML;
                 rsWindow.document.write(dispHTML);
-                //console.log(dispHTML);
+                //console.debug(dispHTML);
                 rsWindow.document.close();
             }
             ).catch((e)=>console.error(e));
@@ -138,7 +139,7 @@
         let ajaxData = request?.ajaxData;
         if (ajaxData && ajaxData.length !== 0) {
             //injectScript();
-            //console.log(ajaxData);
+            //console.debug(ajaxData);
             //{"ajaxData": ajaxData, "pageNum": request.pageNum, "isLastPage": request.isLastPage, "quantityBegin": request.quantityBegin}
             window.postMessage(request, "https://s.1688.com");
             //"*");
@@ -211,7 +212,7 @@
                 innerLi += '<div class="card-element-hover"><div class="deal-container"><div class="dealInfo-1 deal"><div class="deal-item"><div class="price-container"><div class="rmb">¥</div>';
                 innerLi += `<div class="price">${oneObj?.priceAdded}</div></div><div class="deal-num">${oneObj?.quantity}</div>`;
                 innerLi += '</div></div></div></div><div class="mojar-element-promotion"></div></div></div></li>';
-                //console.log(innerLi);
+                //console.debug(innerLi);
             }
             innerLi += '</ol></div></div></div></div></div></div><p style="height:20px;"></p>';
         }

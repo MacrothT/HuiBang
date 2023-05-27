@@ -8,7 +8,7 @@ chrome.runtime.onMessage.addListener((request,sender,sendResponse)=>{
     const iodSfx = request?.iodSuffix;
     if (searchURL && 0 !== searchURL.length && iodSfx && 0 !== iodSfx.length) {
         //const iodURL = searchURL + request.iodSuffix;
-        //console.log(iodURL);
+        //console.debug(iodURL);
         try {
             chrome.runtime.sendMessage({
                 progress: "开始处理第一批"
@@ -77,7 +77,7 @@ async function fetchHTML(url) {
         const error = new Error(response.statusText);
         error.response = response;
         throw error;
-        //console.log(error);
+        //console.error(error);
     }
 }
 
@@ -127,7 +127,7 @@ async function extractORD(url, quantityBegin, tabID) {
                 //const HINT = IS_IOD ? `在指定的 关键词 及 起批量：${quantityBegin} 下没有首单优惠的货源。` : "在指定的 关键词 下没有一件代发的货源。";
                 //console.log(HINT);
                 chrome.runtime.sendMessage({
-                    progress: `在指定的 关键词${IS_IOD ? " 及 起批量：" + quantityBegin : ""} 下没有${IS_IOD ? "首单优惠" : "一件代发"}的货源。`//HINT
+                    progress: `在指定的 关键词 ${IS_IOD ? " 及 起批量：" + quantityBegin : ""} 下没有 ${IS_IOD ? "首单优惠" : "一件代发"}的货源。`//HINT
                 });
                 break;
             }
@@ -197,14 +197,16 @@ async function sortQuantityPricesInPage(data, sortedBefore, quantityBegin, tabID
                 let endIdx = oneOfferHTML.indexOf('</', startIdx);
                 endIdx = oneOfferHTML.lastIndexOf('}', endIdx);
                 let initDataStr = oneOfferHTML.substring(startIdx, endIdx + 1);
-                let dataJSON = JSON.parse(initDataStr)?.data["1081181309101"]?.data
-                  , offerId = "" + oneOffer.id;
-                var tradePrice = oneOffer?.tradePrice || {};
-                // tradePrice下有freightPrice字段，但无真实值。
-                var offerPrice = tradePrice?.offerPrice || {};
-                var quantityPrices = offerPrice?.quantityPrices || [];
+                //Useful properties in window.__INIT_DATA found from https://g.alicdn.com/??code/npm/@ali/tdmod-od-pc-offer-logistics/0.0.11/index-pc.js
+                //window.__INIT_DATA={
+                //    "data":{..."?????????????":{
+                //    "componentType":"@ali/tdmod-od-pc-offer-logistics","data":{...}
+                let dataComp = JSON.parse(initDataStr)?.data;
+                let dataJSON = Object.values(dataComp).find((ele)=>ele.componentType === "@ali/tdmod-od-pc-offer-logistics");
+                dataJSON = dataJSON?.data;
+                let offerId = "" + oneOffer.id;
                 let fitQuantityAndPrice = {
-                    isAdded: Boolean("FREE" === dataJSON?.deliveryFee),
+                    isAdded: Boolean(dataJSON?.freeDeliverFee),
                     offer: {
                         company: {
                             name: oneOffer.company.name,
@@ -222,46 +224,60 @@ async function sortQuantityPricesInPage(data, sortedBefore, quantityBegin, tabID
                     priceAdded: 0,
                     quantity: 0
                 };
-                for (oneQP of quantityPrices) {
-                    const oneQ = oneQP?.quantity
-                      , oneQPNum = +oneQP.valueString;
-                    if (!IS_IOD) {
-                        fitQuantityAndPrice.priceAdded = oneQPNum;
-                        fitQuantityAndPrice.quantity = oneQ;
-                        break;
-                    } else {
-                        let sIdx = oneQ.indexOf('~');
-                        if (-1 != sIdx) {
-                            const upperQ = +oneQ.substring(sIdx + 1);
-                            if (quantityBegin <= upperQ) {
-                                fitQuantityAndPrice.priceAdded = oneQPNum;
-                                fitQuantityAndPrice.quantity = oneQ;
-                                break;
-                            }
+                var tradePrice = oneOffer?.tradePrice || {};
+                // tradePrice下有freightPrice字段，但无真实值。
+                var offerPrice = tradePrice?.offerPrice || {};
+                //console.debug(offerId, offerPrice);
+                var quantityPrices = offerPrice?.quantityPrices || [];
+                // value of offerPrice.priceInfo.priceType may be: "NORMAL","UMP",...
+                if ("NORMAL" !== offerPrice?.priceInfo?.priceType) {
+                    fitQuantityAndPrice.priceAdded = (Number(offerPrice?.priceInfo?.priceUnderLine) * 100) * (Number(offerPrice?.discountRate) * 10) / 10000;
+                    fitQuantityAndPrice.quantity = 1;
+                }//offerPrice.priceInfo.priceType为"NORMAL"时， offerPrice.valueString不太可信。
+                else if (0 === quantityPrices.length) {
+                    fitQuantityAndPrice.priceAdded = +offerPrice?.priceInfo?.consignPrice;
+                    fitQuantityAndPrice.quantity = 1;
+                } else {
+                    for (oneQP of quantityPrices) {
+                        const oneQ = oneQP?.quantity
+                          , oneQPNum = +oneQP.valueString;
+                        if (!IS_IOD) {
+                            fitQuantityAndPrice.priceAdded = oneQPNum;
+                            fitQuantityAndPrice.quantity = oneQ;
+                            break;
                         } else {
-                            sIdx = oneQ.indexOf('≥');
-                            const lowerQ = +oneQ.substring(sIdx + 1);
-                            if (quantityBegin >= lowerQ) {
-                                fitQuantityAndPrice.priceAdded = oneQPNum;
-                                fitQuantityAndPrice.quantity = oneQ;
-                                break;
+                            let sIdx = oneQ.indexOf('~');
+                            if (-1 != sIdx) {
+                                const upperQ = +oneQ.substring(sIdx + 1);
+                                if (quantityBegin <= upperQ) {
+                                    fitQuantityAndPrice.priceAdded = oneQPNum;
+                                    fitQuantityAndPrice.quantity = oneQ;
+                                    break;
+                                }
+                            } else {
+                                sIdx = oneQ.indexOf('≥');
+                                const lowerQ = +oneQ.substring(sIdx + 1);
+                                if (quantityBegin >= lowerQ) {
+                                    fitQuantityAndPrice.priceAdded = oneQPNum;
+                                    fitQuantityAndPrice.quantity = oneQ;
+                                    break;
+                                }
                             }
                         }
                     }
+                    if (0 === fitQuantityAndPrice.priceAdded) {
+                        fitQuantityAndPrice.priceAdded = +offerPrice?.priceInfo?.consignPrice;
+                        fitQuantityAndPrice.quantity = 1;
+                    }
                 }
 
-                //Name and value mappings found from https://g.alicdn.com/??code/npm/@ali/tdmod-od-pc-offer-logistics/0.0.11/index-pc.js:formatted
+                //Name and value mappings found from https://g.alicdn.com/??code/npm/@ali/tdmod-od-pc-offer-logistics/0.0.11/index-pc.js
                 //"@ali/tdmod-od-pc-offer-logistics/index-pc":{"requires":["@ali/pnpm-react@16/index","@ali/rox-next-ui/index","@ali/rox-emitter/index","@ali/rox-od-jsonp/index","@ali/tdmod-od-pc-offer-logistics/index-pc.css"]}
-                //Case 1 "deliveryFee":"TEMPLATED" : window.__INIT_DATA={
-                //                                   "data":{..."1081181309101":{
-                //                                       "componentType":"@ali/tdmod-od-pc-offer-logistics","data":{
-                //                                       ..."templateId":?,"deliveryFee":"TEMPLATED","startAmount":?,"unitWeight":?,
-                //                                       "price":"?","volume":?,"freightInfo":{"unitWeight":?,...}}}}...}
-                //Case 2 "deliveryFee":"FREE" : window.__INIT_DATA={
-                //                              "data":{..."1081181309101":{
-                //                                 "componentType":"@ali/tdmod-od-pc-offer-logistics","data":{
-                //                                 ..."templateId":1,"deliveryFee":"FREE","startAmount":?,"unitWeight":?,
-                //                                 "price":"?","volume":?,"freightInfo":{"unitWeight":?,...}}}}...}
+                //window.__INIT_DATA={
+                //    "data":{..."?????????????":{
+                //    "componentType":"@ali/tdmod-od-pc-offer-logistics","data":{
+                //        ..."templateId":?,"deliveryFee":"TEMPLATED","freeDeliverFee":true/false,
+                //        "startAmount":?,"unitWeight":?,"price":"?","volume":?,"freightInfo":{"unitWeight":?,...}}}}...}
                 const aboveThreshold = await compareWithCPT(fitQuantityAndPrice);
                 if (!aboveThreshold) {
                     ajaxDataArray.push({
@@ -270,8 +286,8 @@ async function sortQuantityPricesInPage(data, sortedBefore, quantityBegin, tabID
                         countryCode: 1001,
                         provinceCode: 1098,
                         cityCode: 1099,
-                        deliveryFee: dataJSON?.deliveryFee,
-                        //window.__INIT_DATA.data["1081181309101"].data.deliveryFee
+                        freeDeliverFee: dataJSON?.freeDeliverFee,
+                        //window.__INIT_DATA.data["1081181309101"].data.freeDeliverFee
                         amount: IS_IOD ? quantityBegin : 1,
                         //window.__INIT_DATA.data["1081181309101"].data.startAmount
                         templateId: dataJSON?.templateId,
